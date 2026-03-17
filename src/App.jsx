@@ -1888,7 +1888,7 @@ function CheckInFlow({ records, saveRecords, onBack }) {
                   }}
                 >
                   <span style={{ color: items[key] ? "#22c55e" : C.err, fontSize: 22, width: 32, textAlign: "center", fontWeight: 700 }}>
-                    {items[key] ? "✓" : "NO"}
+                    {items[key] ? "✓" : "✕"}
                   </span>
                   <span style={{ fontSize: 14, color: items[key] ? C.text : C.err, fontFamily: "Sora, sans-serif" }}>{labels[key]}</span>
                   {!items[key] && (
@@ -2267,7 +2267,7 @@ function RecordsView({ records, saveRecords }) {
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: rec.returnedItems?.[key] ? C.ok : C.err, cursor: "default" }} />
             {tip?.key === key && (
               <div style={{ position: "fixed", left: tip.x, top: tip.y, transform: "translate(-50%, -100%)", background: C.card, border: `1px solid ${C.borderHi}`, borderRadius: 6, padding: "4px 9px", whiteSpace: "nowrap", fontSize: 11, fontFamily: "Sora, sans-serif", color: rec.returnedItems?.[key] ? C.ok : C.err, fontWeight: 600, pointerEvents: "none", zIndex: 1000, letterSpacing: "0.02em", boxShadow: "0 10px 24px rgba(0,0,0,0.28)" }}>
-                {rec.returnedItems?.[key] ? "✓" : "NO"} {label}
+                {rec.returnedItems?.[key] ? "✓" : "✕"} {label}
               </div>
             )}
           </div>
