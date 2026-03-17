@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 const C = {
   bg: "#04101e",
@@ -59,6 +59,28 @@ function persistRecords(records) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   } catch {}
+}
+
+const DEVICES_KEY = "hst:inventory:devices";
+const CHARGERS_KEY = "hst:inventory:chargers";
+const LOCATIONS = ["Bellevue", "Silverdale", "Federal Way"];
+const LOC_STYLE = {
+  Bellevue:      { color: "#5b8fff", bg: "rgba(91,143,255,0.13)" },
+  Silverdale:    { color: "#a78bfa", bg: "rgba(167,139,250,0.13)" },
+  "Federal Way": { color: "#f59e0b", bg: "rgba(245,158,11,0.13)" },
+};
+
+function loadDevices() {
+  try { const r = window.localStorage.getItem(DEVICES_KEY); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function persistDevices(items) {
+  try { window.localStorage.setItem(DEVICES_KEY, JSON.stringify(items)); } catch {}
+}
+function loadChargers() {
+  try { const r = window.localStorage.getItem(CHARGERS_KEY); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function persistChargers(items) {
+  try { window.localStorage.setItem(CHARGERS_KEY, JSON.stringify(items)); } catch {}
 }
 
 function SignaturePad({ onSigned }) {
@@ -552,17 +574,17 @@ function SuccessIcon() {
         width: 72,
         height: 72,
         borderRadius: "50%",
-        background: C.accentBg,
-        border: `2px solid ${C.accent}`,
+        background: "rgba(34,197,94,0.12)",
+        border: "2px solid #22c55e",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         margin: "0 auto 18px",
-        fontSize: 28,
-        color: C.accent,
+        fontSize: 36,
+        color: "#22c55e",
       }}
     >
-      OK
+      ✓
     </div>
   );
 }
@@ -605,19 +627,19 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
               width: 88,
               height: 88,
               borderRadius: "50%",
-              background: "rgba(45,200,185,0.12)",
-              border: `2px solid ${C.accent}`,
+              background: "rgba(34,197,94,0.12)",
+              border: "2px solid #22c55e",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 28,
-              color: C.accent,
+              fontSize: 44,
+              color: "#22c55e",
               marginBottom: 24,
               fontFamily: "Sora, sans-serif",
               fontWeight: 700,
             }}
           >
-            OK
+            ✓
           </div>
           <div
             style={{
@@ -648,7 +670,7 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
                 marginBottom: 12,
               }}
             >
-              Sleep Medicine | Home Sleep Test
+              Sleep Medicine Solutions NW | HST Device Tracker
             </div>
             <div
               style={{
@@ -737,36 +759,83 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
   );
 }
 
+function esc(str) {
+  return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function printLabel(record) {
-  const id = `hst-print-label-${Date.now()}`;
+  const id = `hst-print-doc-${Date.now()}`;
   const div = document.createElement("div");
   div.id = id;
+
+  const signedAtFormatted = record.signedAt
+    ? new Date(record.signedAt).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : "-";
+
+  const ackHtml = ACK.split("\n").map((line) => {
+    if (line === "") return `<div style="height:6pt"></div>`;
+    if (line.startsWith("- ")) return `<div style="display:flex;gap:6pt;font-size:9.5pt;line-height:1.5;"><span style="flex-shrink:0;">•</span><span>${esc(line.slice(2))}</span></div>`;
+    if (/^\d+\./.test(line)) return `<div style="display:flex;gap:6pt;font-size:9.5pt;line-height:1.5;"><span style="flex-shrink:0;min-width:14pt;">${esc(line.match(/^\d+\./)[0])}</span><span>${esc(line.replace(/^\d+\.\s*/, ""))}</span></div>`;
+    return `<div style="font-size:9.5pt;line-height:1.5;">${esc(line)}</div>`;
+  }).join("");
+
+  const sigImg = record.signature
+    ? `<img src="${esc(record.signature)}" style="height:72pt;max-width:2.8in;display:block;border:0.5pt solid #bbb;border-radius:3pt;background:#fafafa;padding:4pt;" />`
+    : `<div style="height:72pt;width:2.8in;border:0.5pt solid #bbb;border-radius:3pt;background:#fafafa;"></div>`;
+
   div.innerHTML = `
-    <div style="width:3.5in;height:2in;background:#000;color:#fff;font-family:Arial,sans-serif;display:flex;flex-direction:column;justify-content:space-between;padding:0.18in 0.2in;box-sizing:border-box;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:0.5pt solid rgba(255,255,255,0.25);padding-bottom:0.1in;margin-bottom:0.1in;gap:10pt;">
-        <div style="min-width:0;">
-          <div style="font-size:13pt;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${record.patientName}</div>
-          <div style="font-size:7pt;color:rgba(255,255,255,0.5);margin-top:2pt;letter-spacing:0.06em;text-transform:uppercase;">DOB: ${fmtDate(record.dob)}</div>
+    <div style="width:8.5in;min-height:11in;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;padding:0.7in 0.75in 0.6in;box-sizing:border-box;display:flex;flex-direction:column;">
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2pt solid #000;padding-bottom:10pt;margin-bottom:18pt;">
+        <div>
+          <div style="font-size:17pt;font-weight:700;letter-spacing:-0.02em;">Sleep Medicine Solutions NW</div>
+          <div style="font-size:9.5pt;color:#555;margin-top:3pt;">Home Sleep Testing Program</div>
         </div>
-        <div style="background:rgba(255,255,255,0.08);border:0.5pt solid rgba(255,255,255,0.2);border-radius:4pt;padding:3pt 7pt;text-align:right;">
-          <div style="font-size:6pt;color:rgba(255,255,255,0.45);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:2pt;">Device Serial</div>
-          <div style="font-family:monospace;font-size:11pt;font-weight:700;color:#2dc8b9;">${record.deviceSerial}</div>
+        <div style="text-align:right;">
+          <div style="font-size:13pt;font-weight:700;">Equipment Acknowledgement</div>
+          <div style="font-size:8pt;color:#555;margin-top:4pt;">Record ID: ${esc(record.id)}</div>
+          <div style="font-size:8pt;color:#555;">Date: ${fmtDate(record.pickupDate)}</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 0.1in;">
-        <div><div style="font-size:6pt;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2pt;">Pick-Up</div><div style="font-size:8pt;font-weight:600;">${fmtDate(record.pickupDate)}</div></div>
-        <div><div style="font-size:6pt;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2pt;">Drop-Off</div><div style="font-size:8pt;font-weight:600;">${fmtDate(record.dropoffDate)}</div></div>
-        <div><div style="font-size:6pt;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2pt;">Follow-Up</div><div style="font-size:8pt;font-weight:600;">${fmtDate(record.followupDate)}</div></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32pt;margin-bottom:20pt;">
+        <div>
+          <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:8pt;">Patient Information</div>
+          <table style="width:100%;font-size:9.5pt;border-collapse:collapse;">
+            <tr><td style="color:#555;padding:3pt 0;width:90pt;">Patient Name</td><td style="font-weight:600;padding:3pt 0;">${esc(record.patientName)}</td></tr>
+            <tr><td style="color:#555;padding:3pt 0;">Date of Birth</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.dob)}</td></tr>
+          </table>
+        </div>
+        <div>
+          <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:8pt;">Device Information</div>
+          <table style="width:100%;font-size:9.5pt;border-collapse:collapse;">
+            <tr><td style="color:#555;padding:3pt 0;width:90pt;">Device Serial</td><td style="font-family:monospace;font-weight:700;padding:3pt 0;">${esc(record.deviceSerial)}</td></tr>
+            <tr><td style="color:#555;padding:3pt 0;">Charger #</td><td style="font-family:monospace;font-weight:700;padding:3pt 0;">${esc(record.chargerNumber)}</td></tr>
+            <tr><td style="color:#555;padding:3pt 0;">Pick-Up Date</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.pickupDate)}</td></tr>
+            <tr><td style="color:#555;padding:3pt 0;">Drop-Off Date</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.dropoffDate)}</td></tr>
+            <tr><td style="color:#555;padding:3pt 0;">Follow-Up Date</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.followupDate)}</td></tr>
+          </table>
+        </div>
       </div>
-      <div style="margin-top:0.06in;">
-        <div style="font-size:6pt;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2pt;">Charger #</div>
-        <div style="font-family:monospace;font-size:8pt;font-weight:600;">${record.chargerNumber}</div>
+
+      <div style="margin-bottom:22pt;">
+        <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:10pt;">Patient Acknowledgement</div>
+        ${ackHtml}
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;border-top:0.5pt solid rgba(255,255,255,0.1);padding-top:0.07in;margin-top:0.07in;gap:8pt;">
-        <div style="font-family:monospace;font-size:6pt;color:rgba(255,255,255,0.3);">ID: ${record.id}</div>
-        <div style="font-size:6pt;color:rgba(255,255,255,0.2);letter-spacing:0.08em;text-transform:uppercase;">Sleep Medicine Solutions | HST</div>
+
+      <div style="margin-top:auto;">
+        <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:10pt;">Patient Signature</div>
+        ${sigImg}
+        <div style="font-size:8.5pt;color:#333;margin-top:8pt;"><strong>Patient:</strong> ${esc(record.patientName)}</div>
+        <div style="font-size:8.5pt;color:#555;margin-top:3pt;"><strong>Signed:</strong> ${signedAtFormatted}</div>
+      </div>
+
+      <div style="margin-top:20pt;padding-top:8pt;border-top:0.5pt solid #ccc;display:flex;justify-content:space-between;font-size:7pt;color:#999;">
+        <div>Sleep Medicine Solutions NW | HST Device Tracker</div>
+        <div>Record ID: ${esc(record.id)}</div>
       </div>
     </div>`;
+
   div.style.cssText = "position:fixed;top:0;left:0;z-index:99999;display:none;";
   document.body.appendChild(div);
 
@@ -774,9 +843,9 @@ function printLabel(record) {
   style.id = `${id}-style`;
   style.textContent = `
     @media print {
-      @page { size: 3.5in 2in; margin: 0; }
+      @page { size: letter; margin: 0; }
       body > *:not(#${id}) { display: none !important; visibility: hidden !important; }
-      #${id} { display: block !important; position: fixed !important; top: 0 !important; left: 0 !important; }
+      #${id} { display: block !important; position: static !important; }
       #${id} * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }`;
   document.head.appendChild(style);
@@ -790,7 +859,7 @@ function printLabel(record) {
   }, 100);
 }
 
-function CheckOutFlow({ records, saveRecords, onBack }) {
+function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
   const [step, setStep] = useState(0);
   const [sig, setSig] = useState(null);
   const [rec, setRec] = useState(null);
@@ -808,6 +877,14 @@ function CheckOutFlow({ records, saveRecords, onBack }) {
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const patientReady = form.patientName.trim() && form.dob;
+  const activeRecords = records.filter((r) => !r.returned);
+  function isItemOut(list, patientFieldKey) {
+    return (serial) => activeRecords.some((r) => (r[patientFieldKey] ?? "").trim().toUpperCase() === serial.trim().toUpperCase());
+  }
+  const deviceOut = isItemOut(devices, "deviceSerial");
+  const chargerOut = isItemOut(chargers, "chargerNumber");
+  const availableDevices = devices.filter((d) => !deviceOut(d.serial));
+  const availableChargers = chargers.filter((c) => !chargerOut(c.serial));
   const deviceReady =
     form.deviceSerial.trim() &&
     form.chargerNumber.trim() &&
@@ -869,7 +946,7 @@ function CheckOutFlow({ records, saveRecords, onBack }) {
               background: "rgba(91,143,255,0.08)",
             }}
           >
-            Print Label
+            Print Acknowledgement
           </button>
           <button
             onClick={() => {
@@ -1019,20 +1096,52 @@ function CheckOutFlow({ records, saveRecords, onBack }) {
             <SectionTitle>Device Assignment</SectionTitle>
             <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(220), gap: 14 }}>
               <Field label="Device Serial Number" required>
-                <input
-                  style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.06em" }}
-                  value={form.deviceSerial}
-                  onChange={(event) => setField("deviceSerial", event.target.value)}
-                  placeholder="Example: WD-240892"
-                />
+                  {devices.length > 0 ? (
+                    <select
+                      style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace" }}
+                      value={form.deviceSerial}
+                      onChange={(event) => setField("deviceSerial", event.target.value)}
+                    >
+                      <option value="">— Select Device —</option>
+                      {availableDevices.map((d) => (
+                        <option key={d.id} value={d.serial}>{d.serial}{d.location ? ` (${d.location})` : ""}</option>
+                      ))}
+                      {devices.filter((d) => deviceOut(d.serial)).map((d) => (
+                        <option key={d.id} value={d.serial} disabled>{d.serial} — Out</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.06em" }}
+                      value={form.deviceSerial}
+                      onChange={(event) => setField("deviceSerial", event.target.value)}
+                      placeholder="Example: WD-240892"
+                    />
+                  )}
               </Field>
               <Field label="Charger Number" required>
-                <input
-                  style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.06em" }}
-                  value={form.chargerNumber}
-                  onChange={(event) => setField("chargerNumber", event.target.value)}
-                  placeholder="Example: CHG-4821"
-                />
+                  {chargers.length > 0 ? (
+                    <select
+                      style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace" }}
+                      value={form.chargerNumber}
+                      onChange={(event) => setField("chargerNumber", event.target.value)}
+                    >
+                      <option value="">— Select Charger —</option>
+                      {availableChargers.map((c) => (
+                        <option key={c.id} value={c.serial}>{c.serial}{c.location ? ` (${c.location})` : ""}</option>
+                      ))}
+                      {chargers.filter((c) => chargerOut(c.serial)).map((c) => (
+                        <option key={c.id} value={c.serial} disabled>{c.serial} — Out</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.06em" }}
+                      value={form.chargerNumber}
+                      onChange={(event) => setField("chargerNumber", event.target.value)}
+                      placeholder="Example: CHG-4821"
+                    />
+                  )}
               </Field>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(180), gap: 14 }}>
@@ -1153,7 +1262,7 @@ function CheckInFlow({ records, saveRecords, onBack }) {
             transition: "all 0.2s",
           }}
         >
-          {items[itemKey] ? "OK" : ""}
+          {items[itemKey] ? "✓" : ""}
         </div>
         <div style={{ fontSize: 14, color: C.text, fontFamily: "Sora, sans-serif", fontWeight: 500 }}>{label}</div>
       </div>
@@ -1259,8 +1368,8 @@ function CheckInFlow({ records, saveRecords, onBack }) {
                     flexWrap: "wrap",
                   }}
                 >
-                  <span style={{ color: items[key] ? C.ok : C.err, fontSize: 18, width: 32, textAlign: "center", fontWeight: 700 }}>
-                    {items[key] ? "OK" : "NO"}
+                  <span style={{ color: items[key] ? "#22c55e" : C.err, fontSize: 22, width: 32, textAlign: "center", fontWeight: 700 }}>
+                    {items[key] ? "✓" : "NO"}
                   </span>
                   <span style={{ fontSize: 14, color: items[key] ? C.text : C.err, fontFamily: "Sora, sans-serif" }}>{labels[key]}</span>
                   {!items[key] && (
@@ -1394,7 +1503,7 @@ function RecordDetail({ rec, onClose, onSave }) {
               onClick={() => printLabel(rec)}
               style={{ ...ghostBtn, marginTop: 0, padding: "5px 12px", color: C.blue, borderColor: "rgba(91,143,255,0.3)" }}
             >
-              Print
+              Print Acknowledgement
             </button>
             <button onClick={onClose} style={{ ...ghostBtn, marginTop: 0, padding: "5px 10px" }}>
               Close
@@ -1485,7 +1594,7 @@ function RecordDetail({ rec, onClose, onSave }) {
                     transition: "all 0.18s",
                   }}
                 >
-                  {items[key] ? "OK" : ""}
+                  {items[key] ? "✓" : ""}
                 </div>
                 <span style={{ fontSize: 13, color: items[key] ? C.text : C.err, fontFamily: "Sora, sans-serif", flex: 1 }}>{label}</span>
                 {!items[key] && (
@@ -1589,7 +1698,7 @@ function RecordsView({ records, saveRecords }) {
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: rec.returnedItems?.[key] ? C.ok : C.err, cursor: "default" }} />
             {tip === key && (
               <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", background: C.card, border: `1px solid ${C.borderHi}`, borderRadius: 6, padding: "4px 9px", whiteSpace: "nowrap", fontSize: 11, fontFamily: "Sora, sans-serif", color: rec.returnedItems?.[key] ? C.ok : C.err, fontWeight: 600, pointerEvents: "none", zIndex: 10, letterSpacing: "0.02em" }}>
-                {rec.returnedItems?.[key] ? "OK" : "NO"} {label}
+                {rec.returnedItems?.[key] ? "✓" : "NO"} {label}
               </div>
             )}
           </div>
@@ -1682,16 +1791,216 @@ function RecordsView({ records, saveRecords }) {
   );
 }
 
-function HomeScreen({ onSelect, records, saveRecords }) {
+const BLANK_INV = { serial: "", location: "Bellevue", notes: "" };
+
+function InventorySection({ items, saveItems, activeRecords, patientField, label, emptyPlaceholder, addLabel }) {
+  const [locFilter, setLocFilter] = React.useState("All");
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState(BLANK_INV);
+  const [editId, setEditId] = React.useState(null);
+  const [editForm, setEditForm] = React.useState(null);
+
+  function getStatus(serial) {
+    const match = activeRecords.find(
+      (r) => (r[patientField] ?? "").trim().toUpperCase() === serial.trim().toUpperCase()
+    );
+    return match ? { inStock: false, patient: match.patientName } : { inStock: true, patient: null };
+  }
+
+  const displayed = locFilter === "All" ? items : items.filter((d) => d.location === locFilter);
+  const inStockCount = items.filter((d) => getStatus(d.serial).inStock).length;
+
+  function addItem() {
+    if (!form.serial.trim()) return;
+    saveItems([...items, { id: uid(), ...form, serial: form.serial.trim().toUpperCase() }]);
+    setForm(BLANK_INV);
+    setAdding(false);
+  }
+
+  function deleteItem(id) {
+    if (!window.confirm(`Remove this ${label.toLowerCase()} from inventory?`)) return;
+    saveItems(items.filter((d) => d.id !== id));
+  }
+
+  function saveEdit() {
+    saveItems(items.map((d) => d.id === editId ? { ...editForm, serial: editForm.serial.trim().toUpperCase() } : d));
+    setEditId(null);
+    setEditForm(null);
+  }
+
+  const fs = { ...inputStyle, fontSize: 12, padding: "7px 10px" };
+
+  const locBtnStyle = (loc) => ({
+    fontFamily: "Sora, sans-serif", fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+    border: `1.5px solid ${locFilter === loc ? (loc === "All" ? C.accent : LOC_STYLE[loc]?.color ?? C.accent) : C.border}`,
+    background: locFilter === loc ? (loc === "All" ? C.accentBg : LOC_STYLE[loc]?.bg ?? C.accentBg) : "transparent",
+    color: locFilter === loc ? (loc === "All" ? C.accent : LOC_STYLE[loc]?.color ?? C.accent) : C.muted,
+    transition: "all 0.15s",
+  });
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+        {[
+          [`Total ${label}s`, items.length, C.text],
+          ["In Stock", inStockCount, "#22c55e"],
+          ["Out", items.length - inStockCount, (items.length - inStockCount) ? C.err : C.muted],
+        ].map(([lbl, val, color]) => (
+          <div key={lbl} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 18px", textAlign: "center", minWidth: 95 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color, fontFamily: "Sora, sans-serif" }}>{val}</div>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 3 }}>{lbl}</div>
+          </div>
+        ))}
+        <div style={{ marginLeft: "auto" }}>
+          <button onClick={() => { setAdding(true); setEditId(null); }} style={{ fontFamily: "Sora, sans-serif", fontSize: 13, fontWeight: 700, padding: "9px 18px", borderRadius: 10, cursor: "pointer", background: C.accentBg, color: C.accent, border: `1.5px solid ${C.borderHi}` }}>
+            + {addLabel}
+          </button>
+        </div>
+      </div>
+
+      {adding && (
+        <div style={{ background: C.card, border: `1px solid ${C.borderHi}`, borderRadius: 12, padding: "16px 18px", marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, fontFamily: "Sora, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>New {label}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: "Sora, sans-serif", marginBottom: 4 }}>{label} Serial / ID *</div>
+              <input style={fs} placeholder={emptyPlaceholder} value={form.serial} onChange={(e) => setForm((p) => ({ ...p, serial: e.target.value }))} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: "Sora, sans-serif", marginBottom: 4 }}>Location</div>
+              <select style={fs} value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}>
+                {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: "Sora, sans-serif", marginBottom: 4 }}>Notes</div>
+              <input style={fs} placeholder="Optional" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={addItem} disabled={!form.serial.trim()} style={{ fontFamily: "Sora, sans-serif", fontSize: 12, fontWeight: 700, padding: "7px 18px", borderRadius: 8, cursor: "pointer", background: C.accentBg, color: C.accent, border: `1.5px solid ${C.borderHi}`, opacity: form.serial.trim() ? 1 : 0.5 }}>Save</button>
+            <button onClick={() => { setAdding(false); setForm(BLANK_INV); }} style={{ fontFamily: "Sora, sans-serif", fontSize: 12, padding: "7px 14px", borderRadius: 8, cursor: "pointer", background: "transparent", color: C.muted, border: `1px solid ${C.border}` }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+        {["All", ...LOCATIONS].map((loc) => (
+          <button key={loc} onClick={() => setLocFilter(loc)} style={locBtnStyle(loc)}>
+            {loc}{loc !== "All" && <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.8 }}>{items.filter((d) => d.location === loc).length}</span>}
+          </button>
+        ))}
+      </div>
+
+      {displayed.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: C.muted, fontFamily: "Sora, sans-serif", fontSize: 14 }}>
+          {items.length === 0 ? `No ${label.toLowerCase()}s yet. Click "+ ${addLabel}" to get started.` : `No ${label.toLowerCase()}s at this location.`}
+        </div>
+      ) : (
+        <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <div style={{ minWidth: 520 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 2fr 80px", gap: "0 8px", padding: "10px 16px", background: C.card, borderBottom: `1px solid ${C.border}` }}>
+                {[`${label} Serial / ID`, "Location", "Status", "Current Patient", ""].map((h) => (
+                  <div key={h} style={{ fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>{h}</div>
+                ))}
+              </div>
+              {displayed.map((item, idx) => {
+                const { inStock, patient } = getStatus(item.serial);
+                const locStyle = LOC_STYLE[item.location] ?? { color: C.muted, bg: C.faint };
+                const rowBorder = idx < displayed.length - 1 ? `1px solid ${C.faint}` : "none";
+                const isEditing = editId === item.id;
+                if (isEditing) {
+                  return (
+                    <div key={item.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 2fr 80px", gap: "0 8px", padding: "10px 16px", borderBottom: rowBorder, background: C.card, alignItems: "center" }}>
+                      <input style={{ ...fs, width: "100%" }} value={editForm.serial} onChange={(e) => setEditForm((p) => ({ ...p, serial: e.target.value }))} />
+                      <select style={{ ...fs, width: "100%" }} value={editForm.location} onChange={(e) => setEditForm((p) => ({ ...p, location: e.target.value }))}>
+                        {LOCATIONS.map((l) => <option key={l}>{l}</option>)}
+                      </select>
+                      <div style={{ fontSize: 11, color: C.muted }}>—</div>
+                      <input style={{ ...fs, width: "100%" }} placeholder="Notes" value={editForm.notes ?? ""} onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))} />
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={saveEdit} style={{ fontSize: 11, fontWeight: 700, fontFamily: "Sora, sans-serif", padding: "4px 9px", borderRadius: 6, cursor: "pointer", background: C.accentBg, color: C.accent, border: `1px solid ${C.borderHi}` }}>Save</button>
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={item.id} style={{ display: "grid", gridTemplateColumns: "2fr 1.3fr 1fr 2fr 80px", gap: "0 8px", padding: "13px 16px", borderBottom: rowBorder, background: C.surface, transition: "background 0.15s", alignItems: "center" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = C.card; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = C.surface; }}
+                  >
+                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: C.text, fontWeight: 600 }}>
+                      {item.serial}
+                      {item.notes && <span style={{ marginLeft: 8, fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif" }}>{item.notes}</span>}
+                    </div>
+                    <div><span style={{ fontSize: 11, fontWeight: 700, fontFamily: "Sora, sans-serif", padding: "3px 9px", borderRadius: 6, background: locStyle.bg, color: locStyle.color }}>{item.location}</span></div>
+                    <div><span style={{ fontSize: 11, fontWeight: 700, fontFamily: "Sora, sans-serif", padding: "3px 9px", borderRadius: 6, textTransform: "uppercase", letterSpacing: "0.06em", background: inStock ? "rgba(34,197,94,0.12)" : C.errBg, color: inStock ? "#22c55e" : C.err }}>{inStock ? "In Stock" : "Out"}</span></div>
+                    <div style={{ fontSize: 12, color: inStock ? C.muted : C.text, fontFamily: "Sora, sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{patient ?? "—"}</div>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => { setEditId(item.id); setEditForm({ ...item }); }} style={{ fontSize: 11, fontFamily: "Sora, sans-serif", padding: "4px 9px", borderRadius: 6, cursor: "pointer", background: "transparent", color: C.muted, border: `1px solid ${C.border}` }}>Edit</button>
+                      <button onClick={() => deleteItem(item.id)} style={{ fontSize: 11, fontFamily: "Sora, sans-serif", padding: "4px 8px", borderRadius: 6, cursor: "pointer", background: "transparent", color: C.err, border: "1px solid rgba(255,85,104,0.25)" }}>✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: C.muted, fontFamily: "Sora, sans-serif", marginTop: 10, textAlign: "right" }}>
+        {displayed.length} {label.toLowerCase()}{displayed.length !== 1 ? "s" : ""}{displayed.length !== items.length ? ` of ${items.length} total` : ""}
+      </div>
+    </div>
+  );
+}
+
+function InventoryView({ devices, saveDevices, chargers, saveChargers, records }) {
+  const [subTab, setSubTab] = useState("devices");
+  const activeRecords = records.filter((r) => !r.returned);
+  const subTabStyle = (key) => ({
+    fontFamily: "Sora, sans-serif", fontSize: 13, fontWeight: subTab === key ? 700 : 400,
+    color: subTab === key ? C.accent : C.muted, background: "none", border: "none",
+    borderBottom: `2px solid ${subTab === key ? C.accent : "transparent"}`,
+    padding: "8px 16px", cursor: "pointer", marginBottom: -1, transition: "all 0.15s",
+  });
+  return (
+    <div>
+      <div style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 22, gap: 2 }}>
+        <button style={subTabStyle("devices")} onClick={() => setSubTab("devices")}>
+          HST Devices
+          {devices.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: C.accentBg, color: C.accent, padding: "2px 6px", borderRadius: 8, fontWeight: 700 }}>{devices.length}</span>}
+        </button>
+        <button style={subTabStyle("chargers")} onClick={() => setSubTab("chargers")}>
+          Chargers
+          {chargers.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: "rgba(91,143,255,0.15)", color: C.blue, padding: "2px 6px", borderRadius: 8, fontWeight: 700 }}>{chargers.length}</span>}
+        </button>
+      </div>
+      {subTab === "devices" && (
+        <InventorySection items={devices} saveItems={saveDevices} activeRecords={activeRecords}
+          patientField="deviceSerial"
+          label="Device" emptyPlaceholder="e.g. WPA-12345" addLabel="Add Device" />
+      )}
+      {subTab === "chargers" && (
+        <InventorySection items={chargers} saveItems={saveChargers} activeRecords={activeRecords}
+          patientField="chargerNumber"
+          label="Charger" emptyPlaceholder="e.g. CHG-001" addLabel="Add Charger" />
+      )}
+    </div>
+  );
+}
+
+function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, chargers, saveChargers }) {
   const [tab, setTab] = useState("home");
   const active = records.filter((record) => !record.returned);
   const overdue = active.filter((record) => record.dropoffDate && new Date(`${record.dropoffDate}T23:59:59`) < new Date());
+  const totalInventory = devices.length + chargers.length;
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "36px 20px" }}>
       <div style={{ marginBottom: 32, textAlign: "center" }}>
         <div style={{ fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase", color: C.accent, fontFamily: "Sora, sans-serif", marginBottom: 12 }}>
-          Sleep Medicine | HST Workflow
+          Sleep Medicine Solutions NW | HST Device Tracker
         </div>
         <h1 style={{ fontSize: 30, fontWeight: 700, color: C.text, fontFamily: "Sora, sans-serif", margin: "0 0 8px", lineHeight: 1.18 }}>
           Device Check-Out System
@@ -1718,6 +2027,7 @@ function HomeScreen({ onSelect, records, saveRecords }) {
         {[
           ["home", "Dashboard"],
           ["records", "All Records"],
+          ["inventory", "Inventory"],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -1728,6 +2038,11 @@ function HomeScreen({ onSelect, records, saveRecords }) {
             {key === "records" && records.length > 0 && (
               <span style={{ marginLeft: 6, fontSize: 10, background: C.accentBg, color: C.accent, padding: "2px 7px", borderRadius: 10, fontWeight: 700 }}>
                 {records.length}
+              </span>
+            )}
+            {key === "inventory" && totalInventory > 0 && (
+              <span style={{ marginLeft: 6, fontSize: 10, background: "rgba(167,139,250,0.15)", color: "#a78bfa", padding: "2px 7px", borderRadius: 10, fontWeight: 700 }}>
+                {totalInventory}
               </span>
             )}
           </button>
@@ -1805,6 +2120,7 @@ function HomeScreen({ onSelect, records, saveRecords }) {
       )}
 
       {tab === "records" && <RecordsView records={records} saveRecords={saveRecords} />}
+      {tab === "inventory" && <InventoryView devices={devices} saveDevices={saveDevices} chargers={chargers} saveChargers={saveChargers} records={records} />}
     </div>
   );
 }
@@ -1812,6 +2128,8 @@ function HomeScreen({ onSelect, records, saveRecords }) {
 export default function App() {
   const [mode, setMode] = useState(null);
   const [records, setRecords] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [chargers, setChargers] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -1829,6 +2147,8 @@ export default function App() {
     document.head.appendChild(style);
 
     setRecords(loadRecords());
+    setDevices(loadDevices());
+    setChargers(loadChargers());
     setLoaded(true);
 
     return () => {
@@ -1841,6 +2161,9 @@ export default function App() {
     persistRecords(nextRecords);
   };
 
+  const saveDevices = (next) => { setDevices(next); persistDevices(next); };
+  const saveChargers = (next) => { setChargers(next); persistChargers(next); };
+
   if (!loaded) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, color: C.muted, fontFamily: "Sora, sans-serif", fontSize: 14 }}>
@@ -1851,8 +2174,8 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
-      {!mode && <HomeScreen onSelect={setMode} records={records} saveRecords={saveRecords} />}
-      {mode === "checkout" && <CheckOutFlow records={records} saveRecords={saveRecords} onBack={() => setMode(null)} />}
+      {!mode && <HomeScreen onSelect={setMode} records={records} saveRecords={saveRecords} devices={devices} saveDevices={saveDevices} chargers={chargers} saveChargers={saveChargers} />}
+      {mode === "checkout" && <CheckOutFlow records={records} saveRecords={saveRecords} onBack={() => setMode(null)} devices={devices} chargers={chargers} />}
       {mode === "checkin" && <CheckInFlow records={records} saveRecords={saveRecords} onBack={() => setMode(null)} />}
     </div>
   );
