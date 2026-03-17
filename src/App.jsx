@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import JsBarcode from "jsbarcode";
+import QRCode from "qrcode";
 
 const C = {
   bg: "#04101e",
@@ -19,22 +21,129 @@ const C = {
 
 const STORAGE_KEY = "hst:records";
 
-const ACK = `By signing below, I acknowledge receipt of the following home sleep testing (HST) equipment from our practice:
+const DEVICE_TYPES = ["CleveMed", "CheckMe O2"];
+const STAFF_KIOSK_EXIT_KEY = "x";
 
-- HST Recording Device (serial number assigned below)
-- Device Charger
-- Finger Pulse Oximeter / Sensor
-
-I agree that:
-1. I will return all equipment by my scheduled drop-off date in the same condition as received.
-2. I accept financial responsibility for any equipment that is lost, stolen, or damaged.
-3. I will follow all setup and usage instructions provided by clinical staff at time of pickup.
-4. I authorize the practice to collect and use my sleep study data for diagnostic and clinical purposes only.
-
-I confirm I have received instructions for proper device use and understand the return process.`;
+const CONSENT_TEMPLATES = {
+  CleveMed: {
+    title: "Home Sleep Test Agreement",
+    intro:
+      "You and your provider have agreed that a Home Sleep Test (HST) will need to be performed in order to develop a course of treatment. Sleep Medicine Solutions, in conjunction with The Center for TMJ & Sleep Solutions NW, uses an FDA-approved HST device for this diagnostic testing.",
+    prompt: "Please acknowledge each of the following items, and then sign below that you agree to the following:",
+    sections: [
+      {
+        id: "receiving",
+        heading: "1. Receiving the device",
+        body:
+          "In Person Pick Up: I have chosen to pick up the HST in person. I and a qualified staff member have reviewed instructions on how to use the device together. I acknowledge that I feel confident and ready to start my sleep test in my home environment. OR Ship the Device to Me: I have chosen to have the HST shipped to me. The kit will be mailed via USPS with tracking. I will use the QR code provided to watch an instructional video on how to use the device.",
+      },
+      {
+        id: "data",
+        heading: "2. Data Collection",
+        body: "I agree to wear the device during sleep. I consent to all data acquisition, and I understand that it may be archived for up to 10 years.",
+      },
+      {
+        id: "care",
+        heading: "3. Care of Device",
+        body:
+          "I am responsible for the device and reusable components once picked up or delivered to the confirmed address. If the device is not returned, lost, or damaged, I understand that I will be charged $4,000 for the HSAT device, $25 for the belt, and/or $700 for the pulse oximeter, via my credit card on file. I understand that my medical coverage will not cover this cost.",
+      },
+      {
+        id: "returning",
+        heading: "4. Returning the device",
+        body:
+          "The HST kit includes: HST device with batteries, reusable effort belt, finger probe connector, return box with pre-paid return and tracking labels, and disposables: finger probe, nasal cannula, hypoallergenic tape, instructions. If I picked up the device in person, I agree to return the HST device and all accompanying hardware (minus disposables) to the facility it was picked up from the morning after my study is completed. OR If the device was shipped to me, the HST device and all accompanying hardware (minus disposables) will be placed back in the provided prepaid return box and dropped off with USPS. Returns must be postmarked no later than four days after initial receipt.",
+      },
+      {
+        id: "delays",
+        heading: "5. Device Return Delays",
+        body:
+          "Devices picked up in office must be returned within 24 hours. Shipped devices must be postmarked by USPS for return no later than 4 days after initial receipt. Devices returned outside of these windows are subject to a $75 per day charge via my credit card on file. I understand that my medical coverage will not cover this cost.",
+      },
+      {
+        id: "questions",
+        heading: "6. Questions",
+        body:
+          "I agree to call Sleep Medicine Solutions NW at (425) 278-2250 in the event I was unable to wear the HSAT device, if I have questions about device set-up, or to report if the return of the device will be delayed.",
+      },
+    ],
+    closing:
+      "By signing below, I agree to the charge for home sleep testing service and allow Sleep Medicine Solutions NW to bill this charge to my medical insurance. I also agree to pay any/all uncovered costs related to this testing as described above.",
+  },
+  "CheckMe O2": {
+    title: "Home Sleep Test Agreement",
+    intro:
+      "You and your provider have agreed that a Home Sleep Test (HST) will need to be performed in order to develop a course of treatment. Sleep Medicine Solutions, in conjunction with The Center for TMJ & Sleep Solutions NW, uses an FDA-approved HST device for this diagnostic testing.",
+    prompt: "Please acknowledge each of the following items, and then sign below that you agree to the following:",
+    sections: [
+      {
+        id: "receiving",
+        heading: "1. Receiving the device",
+        body:
+          "In Person Pick Up: I have chosen to pick up the HST in person. I and a qualified staff member have reviewed instructions on how to use the device together. I acknowledge that I feel confident and ready to start my sleep test in my home environment. OR Ship the Device to Me: I have chosen to have the HST shipped to me. The kit will be mailed via USPS with tracking. I will use the QR code provided to watch an instructional video on how to use the device.",
+      },
+      {
+        id: "data",
+        heading: "2. Data Collection",
+        body: "I agree to wear the device during sleep. I consent to all data acquisition, and I understand that it may be archived for up to 10 years.",
+      },
+      {
+        id: "care",
+        heading: "3. Care of Device",
+        body:
+          "I am responsible for the device and reusable components once picked up or delivered to the confirmed address. If the device is not returned, lost, or damaged, I understand that I will be charged $400 for the HSAT device, and/or $100 for the pulse oximeter, and $30 for the USB charger, via my credit card on file. I understand that my medical coverage will not cover this cost.",
+      },
+      {
+        id: "returning",
+        heading: "4. Returning the device",
+        body:
+          "The HST kit includes: HST device, finger probe connector, USB charger cable, return box with pre-paid return and tracking labels, and disposables: finger probe, nasal cannula, hypoallergenic tape, instructions. If I picked up the device in person, I agree to return the HST device and all accompanying hardware to the facility it was picked up from the morning after my study is completed. OR If the device was shipped to me, the HST device and all accompanying hardware will be placed back in the provided prepaid return box and dropped off with USPS. Returns must be postmarked no later than four days after initial receipt.",
+      },
+      {
+        id: "delays",
+        heading: "5. Device Return Delays",
+        body:
+          "Devices picked up in office must be returned within 72 hours. Shipped devices must be postmarked by USPS for return no later than 4 days after initial receipt. Devices returned outside of these windows are subject to a $75 per day charge via my credit card on file. I understand that my medical coverage will not cover this cost.",
+      },
+      {
+        id: "questions",
+        heading: "6. Questions",
+        body:
+          "I agree to call Sleep Medicine Solutions NW at (425) 842-3931 in the event I was unable to wear the HST device, if I have questions about device set-up, or to report if the return of the device will be delayed.",
+      },
+    ],
+    closing:
+      "By signing below, I agree to the charge for home sleep testing service and allow Sleep Medicine Solutions NW to bill this charge to my medical insurance. I also agree to pay any/all uncovered costs related to this testing as described above.",
+  },
+};
 
 const uid = () => Math.random().toString(36).slice(2, 9).toUpperCase();
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const CHECKIN_BARCODE_PREFIX = "HSTCHK";
+
+const isoFromDate = (dateObj) => {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+function computeDropoffDate(pickupDate, deviceType) {
+  if (!pickupDate) return "";
+  const start = new Date(`${pickupDate}T12:00:00`);
+  if (Number.isNaN(start.getTime())) return "";
+
+  const baseDays = deviceType === "CheckMe O2" ? 3 : 1;
+  start.setDate(start.getDate() + baseDays);
+
+  const day = start.getDay();
+  if (day === 5) start.setDate(start.getDate() + 3);
+  if (day === 6) start.setDate(start.getDate() + 2);
+  if (day === 0) start.setDate(start.getDate() + 1);
+
+  return isoFromDate(start);
+}
+
 const fmtDate = (dateValue) =>
   dateValue
     ? new Date(`${dateValue}T12:00:00`).toLocaleDateString("en-US", {
@@ -474,6 +583,7 @@ function RecordSummary({ rec, compact = false }) {
   const fields = [
     ["Patient", rec.patientName],
     ["Date of Birth", fmtDate(rec.dob)],
+    ["Device Type", rec.deviceType ?? "-"],
     ["Device Serial", rec.deviceSerial],
     ["Charger #", rec.chargerNumber],
     ["Pick-Up", fmtDate(rec.pickupDate)],
@@ -589,14 +699,69 @@ function SuccessIcon() {
   );
 }
 
-function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
+function PatientSigningKiosk({ patientName, deviceType, onSigned, onCancel, allowStaffExit = true, deferSubmitMs = 1800 }) {
   const [sig, setSig] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const template = getConsentTemplate(deviceType);
+  const [checked, setChecked] = useState(() =>
+    Object.fromEntries(template.sections.map((section) => [section.id, false]))
+  );
 
-  const confirm = () => {
-    if (!sig) return;
-    setConfirmed(true);
-    window.setTimeout(() => onSigned(sig), 1800);
+  useEffect(() => {
+    setChecked(Object.fromEntries(template.sections.map((section) => [section.id, false])));
+    setSig(null);
+    setConfirmed(false);
+    setSubmitting(false);
+    setSubmitError("");
+  }, [template]);
+
+  useEffect(() => {
+    if (!allowStaffExit) return undefined;
+
+    const handleKeyDown = (event) => {
+      const matchesCombo = event.ctrlKey && event.shiftKey && event.key.toLowerCase() === STAFF_KIOSK_EXIT_KEY;
+      if (!matchesCombo || !sig || confirmed) return;
+      event.preventDefault();
+      onCancel();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sig, confirmed, onCancel, allowStaffExit]);
+
+  const allAcknowledged = template.sections.every((section) => checked[section.id]);
+
+  const confirm = async () => {
+    if (!sig || !allAcknowledged || submitting) return;
+
+    setSubmitError("");
+    setSubmitting(true);
+
+    if (deferSubmitMs > 0) {
+      setConfirmed(true);
+      window.setTimeout(async () => {
+        try {
+          await Promise.resolve(onSigned(sig));
+        } catch {
+          setConfirmed(false);
+          setSubmitError("Unable to save signature. Please try again.");
+        } finally {
+          setSubmitting(false);
+        }
+      }, deferSubmitMs);
+      return;
+    }
+
+    try {
+      await Promise.resolve(onSigned(sig));
+      setConfirmed(true);
+    } catch {
+      setSubmitError("Unable to save signature. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -686,6 +851,9 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
             <div style={{ fontSize: 14, color: C.muted, fontFamily: "Sora, sans-serif" }}>
               Please read the following carefully, then sign below.
             </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: C.accent, fontFamily: "Sora, sans-serif", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Device Type: {deviceType}
+            </div>
           </div>
 
           <div
@@ -696,13 +864,32 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
               padding: "24px 28px",
               marginBottom: 32,
               fontSize: 14,
-              lineHeight: 2,
+              lineHeight: 1.65,
               color: C.text,
               fontFamily: "Sora, sans-serif",
-              whiteSpace: "pre-line",
             }}
           >
-            {ACK}
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{template.title}</div>
+            <div style={{ marginBottom: 12 }}>{template.intro}</div>
+            <div style={{ marginBottom: 16 }}>{template.prompt}</div>
+
+            {template.sections.map((section) => (
+              <div key={section.id} style={{ marginBottom: 16, borderTop: `1px solid ${C.faint}`, paddingTop: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{section.heading}</div>
+                <div style={{ color: C.text, marginBottom: 10 }}>{section.body}</div>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", color: checked[section.id] ? C.accent : C.text }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(checked[section.id])}
+                    onChange={(event) => setChecked((prev) => ({ ...prev, [section.id]: event.target.checked }))}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  Check here to acknowledge above
+                </label>
+              </div>
+            ))}
+
+            <div style={{ marginTop: 6 }}>{template.closing}</div>
           </div>
 
           <div style={{ marginBottom: 28 }}>
@@ -729,29 +916,24 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
                 ...primaryBtn,
                 fontSize: 16,
                 padding: "14px 40px",
-                opacity: sig ? 1 : 0.35,
-                pointerEvents: sig ? "auto" : "none",
+                opacity: sig && allAcknowledged && !submitting ? 1 : 0.35,
+                pointerEvents: sig && allAcknowledged && !submitting ? "auto" : "none",
                 width: "100%",
                 maxWidth: 360,
               }}
             >
-              I agree and submit signature
+              {submitting ? "Submitting..." : "I agree and submit signature"}
             </button>
-            <button
-              onClick={onCancel}
-              style={{
-                background: "none",
-                border: "none",
-                color: C.muted,
-                fontFamily: "Sora, sans-serif",
-                fontSize: 12,
-                cursor: "pointer",
-                padding: "6px 12px",
-                letterSpacing: "0.04em",
-              }}
-            >
-              Return to staff view
-            </button>
+            {!allAcknowledged && (
+              <div style={{ fontSize: 12, color: C.err, fontFamily: "Sora, sans-serif", textAlign: "center" }}>
+                Please acknowledge all sections before submitting.
+              </div>
+            )}
+            {submitError && (
+              <div style={{ fontSize: 12, color: C.err, fontFamily: "Sora, sans-serif", textAlign: "center" }}>
+                {submitError}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -759,78 +941,259 @@ function PatientSigningKiosk({ patientName, onSigned, onCancel }) {
   );
 }
 
+function RemoteSigningPage({ sessionId }) {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        setLoading(true);
+        const next = await getSigningSession(sessionId);
+        if (cancelled) return;
+        setSession(next);
+        setError("");
+      } catch {
+        if (cancelled) return;
+        setError("This signing session is unavailable or has expired.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Sora, sans-serif" }}>
+        Loading signing session...
+      </div>
+    );
+  }
+
+  if (error || !session) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ maxWidth: 420, textAlign: "center", fontFamily: "Sora, sans-serif" }}>
+          <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 10 }}>Signing Session Unavailable</div>
+          <div style={{ color: C.muted, lineHeight: 1.6 }}>{error || "This signing session is unavailable."}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (session.status === "completed") {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ maxWidth: 420, textAlign: "center", fontFamily: "Sora, sans-serif" }}>
+          <div style={{ fontSize: 26, fontWeight: 700, marginBottom: 10 }}>Signature Submitted</div>
+          <div style={{ color: C.muted, lineHeight: 1.6 }}>You may hand the tablet back to staff.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <PatientSigningKiosk
+      patientName={session.patientName}
+      deviceType={session.deviceType}
+      onSigned={(signature) => submitSigningSession(sessionId, signature)}
+      onCancel={() => {}}
+      allowStaffExit={false}
+      deferSubmitMs={0}
+    />
+  );
+}
+
 function esc(str) {
   return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function getConsentTemplate(deviceType) {
+  return CONSENT_TEMPLATES[deviceType] ?? CONSENT_TEMPLATES[DEVICE_TYPES[0]];
+}
+
+function consentTemplateToPrintHtml(template) {
+  const parts = [
+    `<div style="font-size:8.2pt;line-height:1.32;font-weight:700;margin-bottom:4pt;">${esc(template.title)}</div>`,
+    `<div style="font-size:7.8pt;line-height:1.32;margin-bottom:4pt;">${esc(template.intro)}</div>`,
+    `<div style="font-size:7.8pt;line-height:1.32;margin-bottom:6pt;">${esc(template.prompt)}</div>`,
+    `<div style="column-count:2;column-gap:18pt;">`,
+  ];
+
+  template.sections.forEach((section) => {
+    parts.push(`<div style="break-inside:avoid;page-break-inside:avoid;margin-bottom:6pt;">`);
+    parts.push(`<div style="font-size:7.8pt;line-height:1.28;font-weight:700;margin-bottom:2pt;">${esc(section.heading)}</div>`);
+    parts.push(`<div style="font-size:7.6pt;line-height:1.28;">${esc(section.body)}</div>`);
+    parts.push(`<div style="font-size:7.2pt;line-height:1.22;margin-top:3pt;">[✓] Check here to acknowledge above</div>`);
+    parts.push(`</div>`);
+  });
+
+  parts.push(`</div>`);
+  parts.push(`<div style="font-size:7.6pt;line-height:1.28;margin-top:4pt;">${esc(template.closing)}</div>`);
+
+  return parts.join("");
+}
+
+function buildCheckInBarcodeValue(record) {
+  return `${CHECKIN_BARCODE_PREFIX}|${String(record.id ?? "").trim()}|${String(record.deviceSerial ?? "").trim().toUpperCase()}`;
+}
+
+function parseCheckInBarcodeValue(rawValue) {
+  const value = String(rawValue ?? "").trim();
+  if (!value.startsWith(`${CHECKIN_BARCODE_PREFIX}|`)) return null;
+
+  const [, id, ...serialParts] = value.split("|");
+  const deviceSerial = serialParts.join("|").trim().toUpperCase();
+  if (!id || !deviceSerial) return null;
+
+  return { id: id.trim(), deviceSerial };
+}
+
+function buildPatientName(firstName, lastName) {
+  return `${String(firstName ?? "").trim()} ${String(lastName ?? "").trim()}`.trim();
+}
+
+async function createSigningSession(patientName, deviceType) {
+  const response = await fetch("/api/signing-sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patientName, deviceType }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to create signing session");
+  }
+
+  return response.json();
+}
+
+async function getSigningSession(sessionId) {
+  const response = await fetch(`/api/signing-sessions/${encodeURIComponent(sessionId)}`);
+  if (!response.ok) {
+    throw new Error("Unable to load signing session");
+  }
+  return response.json();
+}
+
+async function submitSigningSession(sessionId, signature) {
+  const response = await fetch(`/api/signing-sessions/${encodeURIComponent(sessionId)}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ signature }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to submit signature");
+  }
+
+  return response.json();
+}
+
+async function cancelSigningSession(sessionId) {
+  await fetch(`/api/signing-sessions/${encodeURIComponent(sessionId)}/cancel`, { method: "POST" });
+}
+
+function renderCheckInBarcodeMarkup(record) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  JsBarcode(svg, buildCheckInBarcodeValue(record), {
+    format: "CODE128",
+    width: 1.08,
+    height: 32,
+    margin: 0,
+    displayValue: true,
+    fontSize: 8,
+    textMargin: 3,
+    background: "#ffffff",
+    lineColor: "#000000",
+  });
+  return svg.outerHTML;
 }
 
 function printLabel(record) {
   const id = `hst-print-doc-${Date.now()}`;
   const div = document.createElement("div");
   div.id = id;
+  const template = getConsentTemplate(record.deviceType);
 
   const signedAtFormatted = record.signedAt
     ? new Date(record.signedAt).toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
     : "-";
 
-  const ackHtml = ACK.split("\n").map((line) => {
-    if (line === "") return `<div style="height:6pt"></div>`;
-    if (line.startsWith("- ")) return `<div style="display:flex;gap:6pt;font-size:9.5pt;line-height:1.5;"><span style="flex-shrink:0;">•</span><span>${esc(line.slice(2))}</span></div>`;
-    if (/^\d+\./.test(line)) return `<div style="display:flex;gap:6pt;font-size:9.5pt;line-height:1.5;"><span style="flex-shrink:0;min-width:14pt;">${esc(line.match(/^\d+\./)[0])}</span><span>${esc(line.replace(/^\d+\.\s*/, ""))}</span></div>`;
-    return `<div style="font-size:9.5pt;line-height:1.5;">${esc(line)}</div>`;
-  }).join("");
+  const ackHtml = consentTemplateToPrintHtml(template);
 
   const sigImg = record.signature
     ? `<img src="${esc(record.signature)}" style="height:72pt;max-width:2.8in;display:block;border:0.5pt solid #bbb;border-radius:3pt;background:#fafafa;padding:4pt;" />`
     : `<div style="height:72pt;width:2.8in;border:0.5pt solid #bbb;border-radius:3pt;background:#fafafa;"></div>`;
+  const barcodeMarkup = renderCheckInBarcodeMarkup(record);
 
   div.innerHTML = `
-    <div style="width:8.5in;min-height:11in;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;padding:0.7in 0.75in 0.6in;box-sizing:border-box;display:flex;flex-direction:column;">
+    <div style="width:8.5in;height:11in;overflow:hidden;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;padding:0.46in 0.55in 0.42in;box-sizing:border-box;display:flex;flex-direction:column;">
 
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2pt solid #000;padding-bottom:10pt;margin-bottom:18pt;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1.5pt solid #000;padding-bottom:6pt;margin-bottom:10pt;">
         <div>
-          <div style="font-size:17pt;font-weight:700;letter-spacing:-0.02em;">Sleep Medicine Solutions NW</div>
-          <div style="font-size:9.5pt;color:#555;margin-top:3pt;">Home Sleep Testing Program</div>
+          <div style="font-size:14pt;font-weight:700;letter-spacing:-0.02em;">Sleep Medicine Solutions NW</div>
+          <div style="font-size:8pt;color:#555;margin-top:2pt;">Home Sleep Testing Program</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:13pt;font-weight:700;">Equipment Acknowledgement</div>
-          <div style="font-size:8pt;color:#555;margin-top:4pt;">Record ID: ${esc(record.id)}</div>
-          <div style="font-size:8pt;color:#555;">Date: ${fmtDate(record.pickupDate)}</div>
+          <div style="font-size:11pt;font-weight:700;">Equipment Acknowledgement</div>
+          <div style="font-size:7pt;color:#555;margin-top:3pt;">Record ID: ${esc(record.id)}</div>
+          <div style="font-size:7pt;color:#555;">Date: ${fmtDate(record.pickupDate)}</div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32pt;margin-bottom:20pt;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24pt;margin-bottom:10pt;">
         <div>
-          <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:8pt;">Patient Information</div>
-          <table style="width:100%;font-size:9.5pt;border-collapse:collapse;">
-            <tr><td style="color:#555;padding:3pt 0;width:90pt;">Patient Name</td><td style="font-weight:600;padding:3pt 0;">${esc(record.patientName)}</td></tr>
-            <tr><td style="color:#555;padding:3pt 0;">Date of Birth</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.dob)}</td></tr>
+          <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:2pt;margin-bottom:5pt;">Patient Information</div>
+          <table style="width:100%;font-size:8pt;border-collapse:collapse;">
+            <tr><td style="color:#555;padding:2pt 0;width:78pt;">Patient Name</td><td style="font-weight:600;padding:2pt 0;">${esc(record.patientName)}</td></tr>
+            <tr><td style="color:#555;padding:2pt 0;">Date of Birth</td><td style="font-weight:600;padding:2pt 0;">${fmtDate(record.dob)}</td></tr>
           </table>
         </div>
         <div>
-          <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:8pt;">Device Information</div>
-          <table style="width:100%;font-size:9.5pt;border-collapse:collapse;">
-            <tr><td style="color:#555;padding:3pt 0;width:90pt;">Device Serial</td><td style="font-family:monospace;font-weight:700;padding:3pt 0;">${esc(record.deviceSerial)}</td></tr>
-            <tr><td style="color:#555;padding:3pt 0;">Charger #</td><td style="font-family:monospace;font-weight:700;padding:3pt 0;">${esc(record.chargerNumber)}</td></tr>
-            <tr><td style="color:#555;padding:3pt 0;">Pick-Up Date</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.pickupDate)}</td></tr>
-            <tr><td style="color:#555;padding:3pt 0;">Drop-Off Date</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.dropoffDate)}</td></tr>
-            <tr><td style="color:#555;padding:3pt 0;">Follow-Up Date</td><td style="font-weight:600;padding:3pt 0;">${fmtDate(record.followupDate)}</td></tr>
+          <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:2pt;margin-bottom:5pt;">Device Information</div>
+          <table style="width:100%;font-size:8pt;border-collapse:collapse;">
+            <tr><td style="color:#555;padding:2pt 0;width:78pt;">Device Type</td><td style="font-weight:600;padding:2pt 0;">${esc(record.deviceType ?? "-")}</td></tr>
+            <tr><td style="color:#555;padding:2pt 0;width:78pt;">Device Serial</td><td style="font-family:monospace;font-weight:700;padding:2pt 0;">${esc(record.deviceSerial)}</td></tr>
+            <tr><td style="color:#555;padding:2pt 0;">Charger #</td><td style="font-family:monospace;font-weight:700;padding:2pt 0;">${esc(record.chargerNumber)}</td></tr>
+            <tr><td style="color:#555;padding:2pt 0;">Pick-Up Date</td><td style="font-weight:600;padding:2pt 0;">${fmtDate(record.pickupDate)}</td></tr>
+            <tr><td style="color:#555;padding:2pt 0;">Drop-Off Date</td><td style="font-weight:600;padding:2pt 0;">${fmtDate(record.dropoffDate)}</td></tr>
+            <tr><td style="color:#555;padding:2pt 0;">Follow-Up Date</td><td style="font-weight:600;padding:2pt 0;">${fmtDate(record.followupDate)}</td></tr>
           </table>
         </div>
       </div>
 
-      <div style="margin-bottom:22pt;">
-        <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:10pt;">Patient Acknowledgement</div>
+      <div style="margin-bottom:10pt;flex:1 1 auto;min-height:0;">
+        <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:2pt;margin-bottom:5pt;">Patient Acknowledgement</div>
         ${ackHtml}
       </div>
 
-      <div style="margin-top:auto;">
-        <div style="font-size:7pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:3pt;margin-bottom:10pt;">Patient Signature</div>
-        ${sigImg}
-        <div style="font-size:8.5pt;color:#333;margin-top:8pt;"><strong>Patient:</strong> ${esc(record.patientName)}</div>
-        <div style="font-size:8.5pt;color:#555;margin-top:3pt;"><strong>Signed:</strong> ${signedAtFormatted}</div>
+      <div style="display:grid;grid-template-columns:1.1fr 1.3fr;gap:0 18pt;align-items:end;margin-top:6pt;">
+        <div>
+          <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:2pt;margin-bottom:5pt;">Patient Signature</div>
+          ${sigImg}
+          <div style="font-size:7.2pt;color:#333;margin-top:4pt;"><strong>Patient:</strong> ${esc(record.patientName)}</div>
+          <div style="font-size:7.2pt;color:#555;margin-top:2pt;"><strong>Signed:</strong> ${signedAtFormatted}</div>
+        </div>
+
+        <div>
+          <div style="font-size:6.5pt;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#555;border-bottom:0.5pt solid #ccc;padding-bottom:2pt;margin-bottom:5pt;">Check-In Barcode</div>
+          <div style="border:0.5pt solid #ccc;border-radius:4pt;padding:4pt 6pt;background:#fff;display:flex;align-items:center;justify-content:center;">
+            <div style="min-width:0;max-width:2.45in;">
+            ${barcodeMarkup}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div style="margin-top:20pt;padding-top:8pt;border-top:0.5pt solid #ccc;display:flex;justify-content:space-between;font-size:7pt;color:#999;">
+      <div style="margin-top:8pt;padding-top:5pt;border-top:0.5pt solid #ccc;display:flex;justify-content:space-between;font-size:6.5pt;color:#999;">
         <div>Sleep Medicine Solutions NW | HST Device Tracker</div>
         <div>Record ID: ${esc(record.id)}</div>
       </div>
@@ -864,19 +1227,83 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
   const [sig, setSig] = useState(null);
   const [rec, setRec] = useState(null);
   const [kioskOpen, setKioskOpen] = useState(false);
+  const [remoteSession, setRemoteSession] = useState(null);
+  const [creatingRemoteSession, setCreatingRemoteSession] = useState(false);
+  const [remoteSessionError, setRemoteSessionError] = useState("");
   const [form, setForm] = useState({
-    patientName: "",
+    firstName: "",
+    lastName: "",
     dob: "",
+    deviceType: DEVICE_TYPES[0],
     deviceSerial: "",
     chargerNumber: "",
     pickupDate: todayISO(),
-    dropoffDate: "",
+    dropoffDate: computeDropoffDate(todayISO(), DEVICE_TYPES[0]),
     followupDate: "",
   });
 
-  const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  useEffect(() => {
+    setForm((prev) => {
+      const autoDropoff = computeDropoffDate(prev.pickupDate, prev.deviceType);
+      if (prev.dropoffDate === autoDropoff) return prev;
+      return { ...prev, dropoffDate: autoDropoff };
+    });
+  }, [form.pickupDate, form.deviceType]);
 
-  const patientReady = form.patientName.trim() && form.dob;
+  useEffect(() => {
+    if (!remoteSession?.id || sig) return undefined;
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const next = await getSigningSession(remoteSession.id);
+        if (next.status === "completed" && next.signature) {
+          setSig(next.signature);
+          setRemoteSession(null);
+          setRemoteSessionError("");
+          setStep(2);
+        }
+      } catch {
+        setRemoteSessionError("Tablet signing session expired or became unavailable.");
+        setRemoteSession(null);
+      }
+    }, 1500);
+
+    return () => window.clearInterval(intervalId);
+  }, [remoteSession, sig]);
+
+  const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const patientName = buildPatientName(form.firstName, form.lastName);
+
+  const launchTabletSigning = async () => {
+    try {
+      setCreatingRemoteSession(true);
+      setRemoteSessionError("");
+      const session = await createSigningSession(patientName, form.deviceType);
+      const signingUrl = new URL(session.signingUrl, window.location.origin).toString();
+      const qrCodeUrl = await QRCode.toDataURL(signingUrl, {
+        width: 240,
+        margin: 1,
+        color: { dark: C.text, light: "#ffffff" },
+      });
+      setRemoteSession({ id: session.id, signingUrl, qrCodeUrl });
+      setKioskOpen(false);
+      setSig(null);
+    } catch {
+      setRemoteSessionError("Unable to create tablet signing session.");
+    } finally {
+      setCreatingRemoteSession(false);
+    }
+  };
+
+  const cancelTabletSigning = async () => {
+    if (remoteSession?.id) {
+      await cancelSigningSession(remoteSession.id);
+    }
+    setRemoteSession(null);
+    setRemoteSessionError("");
+  };
+
+  const patientReady = form.firstName.trim() && form.lastName.trim() && form.dob && form.deviceType;
   const activeRecords = records.filter((r) => !r.returned);
   function isItemOut(list, patientFieldKey) {
     return (serial) => activeRecords.some((r) => (r[patientFieldKey] ?? "").trim().toUpperCase() === serial.trim().toUpperCase());
@@ -896,6 +1323,7 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
     const newRec = {
       id: uid(),
       ...form,
+      patientName,
       signature: sig,
       signedAt: new Date().toISOString(),
       returned: false,
@@ -952,16 +1380,20 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
             onClick={() => {
               setStep(0);
               setForm({
-                patientName: "",
+                firstName: "",
+                lastName: "",
                 dob: "",
+                deviceType: DEVICE_TYPES[0],
                 deviceSerial: "",
                 chargerNumber: "",
                 pickupDate: todayISO(),
-                dropoffDate: "",
+                dropoffDate: computeDropoffDate(todayISO(), DEVICE_TYPES[0]),
                 followupDate: "",
               });
               setSig(null);
               setRec(null);
+              setRemoteSession(null);
+              setRemoteSessionError("");
             }}
             style={primaryBtn}
           >
@@ -969,7 +1401,7 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
           </button>
         </div>
         <div style={{ textAlign: "center", marginTop: 10, fontSize: 11, color: C.muted, fontFamily: "Sora, sans-serif" }}>
-          Label formatted for Avery Presta 94237 (3.5 x 2)
+          Prints a full-page acknowledgement with a scannable check-in barcode
         </div>
       </Screen>
     );
@@ -979,7 +1411,8 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
     <>
       {kioskOpen && (
         <PatientSigningKiosk
-          patientName={form.patientName}
+          patientName={patientName}
+          deviceType={form.deviceType}
           onSigned={(signature) => {
             setSig(signature);
             setKioskOpen(false);
@@ -995,14 +1428,24 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
         {step === 0 && (
           <div style={cardStyle}>
             <SectionTitle>Patient Information</SectionTitle>
-            <Field label="Full Name" required>
-              <input
-                style={inputStyle}
-                value={form.patientName}
-                onChange={(event) => setField("patientName", event.target.value)}
-                placeholder="Patient full name"
-              />
-            </Field>
+            <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(220), gap: 14 }}>
+              <Field label="First Name" required>
+                <input
+                  style={inputStyle}
+                  value={form.firstName}
+                  onChange={(event) => setField("firstName", event.target.value)}
+                  placeholder="Patient first name"
+                />
+              </Field>
+              <Field label="Last Name" required>
+                <input
+                  style={inputStyle}
+                  value={form.lastName}
+                  onChange={(event) => setField("lastName", event.target.value)}
+                  placeholder="Patient last name"
+                />
+              </Field>
+            </div>
             <Field label="Date of Birth" required>
               <input
                 style={inputStyle}
@@ -1010,6 +1453,17 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
                 value={form.dob}
                 onChange={(event) => setField("dob", event.target.value)}
               />
+            </Field>
+            <Field label="Device Type" required>
+              <select
+                style={inputStyle}
+                value={form.deviceType}
+                onChange={(event) => setField("deviceType", event.target.value)}
+              >
+                {DEVICE_TYPES.map((deviceType) => (
+                  <option key={deviceType} value={deviceType}>{deviceType}</option>
+                ))}
+              </select>
             </Field>
             <div style={{ textAlign: "right", marginTop: 8 }}>
               <button
@@ -1027,12 +1481,43 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
             <SectionTitle>Patient Signature</SectionTitle>
             <div style={{ marginBottom: 22 }}>
               <div style={{ fontSize: 14, color: C.text, fontFamily: "Sora, sans-serif", marginBottom: 6 }}>
-                Ready to collect acknowledgment from <strong>{form.patientName}</strong>.
+                Ready to collect acknowledgment from <strong>{patientName}</strong>.
+              </div>
+              <div style={{ fontSize: 12, color: C.accent, fontFamily: "Sora, sans-serif", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+                Agreement Template: {form.deviceType}
               </div>
               <div style={{ fontSize: 13, color: C.muted, fontFamily: "Sora, sans-serif", lineHeight: 1.7 }}>
                 Hand the device to the patient and launch the signing screen. The staff view remains hidden until they complete their signature.
               </div>
             </div>
+
+            {remoteSession && !sig && (
+              <div style={{ background: C.card, border: `1px solid ${C.borderHi}`, borderRadius: 12, padding: "18px 20px", marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "Sora, sans-serif", marginBottom: 12 }}>
+                  Waiting for Patient Signature
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(220), gap: 18, alignItems: "center" }}>
+                  <div style={{ background: "#fff", borderRadius: 12, padding: 14, width: "fit-content", margin: "0 auto" }}>
+                    <img src={remoteSession.qrCodeUrl} alt="Tablet signing QR code" style={{ display: "block", width: 210, height: 210 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, color: C.text, fontFamily: "Sora, sans-serif", fontWeight: 600, marginBottom: 8 }}>
+                      Have the patient scan this QR code on the tablet.
+                    </div>
+                    <div style={{ fontSize: 13, color: C.muted, fontFamily: "Sora, sans-serif", lineHeight: 1.7, marginBottom: 10 }}>
+                      This screen will stay in waiting mode and move to the next step automatically after the tablet signature is submitted.
+                    </div>
+                    <div style={{ fontSize: 12, color: C.blue, fontFamily: "Sora, sans-serif", lineHeight: 1.6, marginBottom: 10 }}>
+                      For tablet access, open this app on the staff computer using its network address instead of localhost before launching the QR session.
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, fontFamily: "JetBrains Mono, monospace", overflowWrap: "anywhere", marginBottom: 12 }}>
+                      {remoteSession.signingUrl}
+                    </div>
+                    <button onClick={cancelTabletSigning} style={ghostBtn}>Cancel Tablet Request</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {sig ? (
               <div style={{ marginBottom: 20 }}>
@@ -1069,12 +1554,27 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setKioskOpen(true)}
-                style={{ ...primaryBtn, width: "100%", fontSize: 15, padding: "14px 0", marginBottom: 4, textAlign: "center" }}
-              >
-                Launch Patient Signing Screen
-              </button>
+              <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(220), gap: 12, marginBottom: 4 }}>
+                <button
+                  onClick={launchTabletSigning}
+                  style={{ ...primaryBtn, width: "100%", fontSize: 15, padding: "14px 0", textAlign: "center", opacity: creatingRemoteSession ? 0.6 : 1 }}
+                  disabled={creatingRemoteSession}
+                >
+                  {creatingRemoteSession ? "Preparing Tablet Session..." : "Launch Tablet Signing via QR"}
+                </button>
+                <button
+                  onClick={() => setKioskOpen(true)}
+                  style={{ ...secondaryBtn, width: "100%", fontSize: 15, padding: "14px 0", marginTop: 0, textAlign: "center" }}
+                >
+                  Use This Screen Instead
+                </button>
+              </div>
+            )}
+
+            {remoteSessionError && (
+              <div style={{ marginTop: 10, fontSize: 12, color: C.err, fontFamily: "Sora, sans-serif" }}>
+                {remoteSessionError}
+              </div>
             )}
 
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, gap: 12, flexWrap: "wrap" }}>
@@ -1160,6 +1660,9 @@ function CheckOutFlow({ records, saveRecords, onBack, devices, chargers }) {
                   value={form.dropoffDate}
                   onChange={(event) => setField("dropoffDate", event.target.value)}
                 />
+                <div style={{ marginTop: 6, fontSize: 11, color: C.muted, fontFamily: "Sora, sans-serif", lineHeight: 1.5 }}>
+                  Auto-calculated from device type and pickup date. CleveMed defaults to next day, CheckMe O2 defaults to three days later, and Friday through Sunday dates roll to Monday. You can still override this date manually.
+                </div>
               </Field>
               <Field label="Follow-Up Date" required>
                 <input
@@ -1195,10 +1698,23 @@ function CheckInFlow({ records, saveRecords, onBack }) {
   const [items, setItems] = useState({ device: false, charger: false, sensor: false });
   const [notes, setNotes] = useState("");
 
-  const lookup = (serial) => {
-    const match = records.find(
-      (record) => record.deviceSerial.toLowerCase().trim() === serial.toLowerCase().trim() && !record.returned
-    );
+  const lookup = (scannedValue) => {
+    const barcodePayload = parseCheckInBarcodeValue(scannedValue);
+    const normalizedSerial = String(barcodePayload?.deviceSerial ?? scannedValue ?? "").trim().toUpperCase();
+
+    const match = barcodePayload
+      ? records.find(
+          (record) =>
+            !record.returned &&
+            record.id === barcodePayload.id &&
+            String(record.deviceSerial ?? "").trim().toUpperCase() === barcodePayload.deviceSerial
+        ) ?? records.find(
+          (record) => !record.returned && String(record.deviceSerial ?? "").trim().toUpperCase() === normalizedSerial
+        )
+      : records.find(
+          (record) => !record.returned && String(record.deviceSerial ?? "").trim().toUpperCase() === normalizedSerial
+        );
+
     if (match) {
       setFound(match);
       setItems(match.returnedItems || { device: false, charger: false, sensor: false });
@@ -1206,7 +1722,7 @@ function CheckInFlow({ records, saveRecords, onBack }) {
       setNotFound(null);
       setStep(1);
     } else {
-      setNotFound(serial);
+      setNotFound(normalizedSerial || String(scannedValue ?? "").trim());
     }
   };
 
@@ -1275,7 +1791,10 @@ function CheckInFlow({ records, saveRecords, onBack }) {
 
       {step === 0 && (
         <div style={cardStyle}>
-          <SectionTitle>Scan or Enter Device Serial Number</SectionTitle>
+          <SectionTitle>Scan Acknowledgement Barcode or Enter Device Serial Number</SectionTitle>
+          <div style={{ color: C.muted, fontSize: 13, fontFamily: "Sora, sans-serif", lineHeight: 1.7, marginBottom: 14 }}>
+            Scan the barcode printed on the patient acknowledgement to load the active checkout automatically, or enter the device serial manually.
+          </div>
           <BarcodeScanner onScanned={lookup} />
           {notFound && (
             <div
@@ -1429,6 +1948,10 @@ function RecordDetail({ rec, onClose, onSave }) {
   const statusLabel = rec.returned ? "Returned" : isOverdue ? "Overdue" : "Out";
 
   const [items, setItems] = useState(rec.returnedItems || { device: false, charger: false, sensor: false });
+  const [dates, setDates] = useState({
+    dropoffDate: rec.dropoffDate || "",
+    followupDate: rec.followupDate || "",
+  });
   const [saved, setSaved] = useState(false);
 
   const itemLabels = [
@@ -1436,7 +1959,9 @@ function RecordDetail({ rec, onClose, onSave }) {
     ["charger", "Device Charger"],
     ["sensor", "Finger Pulse Oximeter / Sensor"],
   ];
-  const dirty = rec.returned && itemLabels.some(([key]) => items[key] !== (rec.returnedItems?.[key] ?? false));
+  const itemDirty = rec.returned && itemLabels.some(([key]) => items[key] !== (rec.returnedItems?.[key] ?? false));
+  const datesDirty = dates.dropoffDate !== (rec.dropoffDate || "") || dates.followupDate !== (rec.followupDate || "");
+  const dirty = itemDirty || datesDirty;
 
   const toggle = (key) => {
     if (!rec.returned) return;
@@ -1445,7 +1970,12 @@ function RecordDetail({ rec, onClose, onSave }) {
   };
 
   const handleSave = () => {
-    onSave({ ...rec, returnedItems: items });
+    onSave({
+      ...rec,
+      returnedItems: items,
+      dropoffDate: dates.dropoffDate,
+      followupDate: dates.followupDate,
+    });
     setSaved(true);
   };
 
@@ -1519,6 +2049,7 @@ function RecordDetail({ rec, onClose, onSave }) {
             {[
               ["Patient", rec.patientName],
               ["Date of Birth", fmtDate(rec.dob)],
+              ["Device Type", rec.deviceType ?? "-"],
               ["Device Serial", rec.deviceSerial],
               ["Charger #", rec.chargerNumber],
             ].map(([label, value]) => (
@@ -1534,17 +2065,38 @@ function RecordDetail({ rec, onClose, onSave }) {
           <div style={{ fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "Sora, sans-serif", marginBottom: 14 }}>
             Dates
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(140), gap: 14 }}>
-            {[
-              ["Pick-Up", rec.pickupDate],
-              ["Drop-Off", rec.dropoffDate],
-              ["Follow-Up", rec.followupDate],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <div style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5, fontFamily: "Sora, sans-serif" }}>{label}</div>
-                <div style={{ fontSize: 13, color: !rec.returned && label === "Drop-Off" && isOverdue ? C.err : C.text, fontFamily: "Sora, sans-serif" }}>{fmtDate(value)}</div>
-              </div>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(180), gap: 14 }}>
+            <div>
+              <div style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5, fontFamily: "Sora, sans-serif" }}>Pick-Up</div>
+              <div style={{ fontSize: 13, color: C.text, fontFamily: "Sora, sans-serif" }}>{fmtDate(rec.pickupDate)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5, fontFamily: "Sora, sans-serif" }}>Drop-Off</div>
+              <input
+                style={inputStyle}
+                type="date"
+                value={dates.dropoffDate}
+                onChange={(event) => {
+                  setDates((prev) => ({ ...prev, dropoffDate: event.target.value }));
+                  setSaved(false);
+                }}
+              />
+              {!rec.returned && dates.dropoffDate && new Date(`${dates.dropoffDate}T23:59:59`) < new Date() && (
+                <div style={{ marginTop: 6, fontSize: 11, color: C.err, fontFamily: "Sora, sans-serif" }}>Currently overdue</div>
+              )}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5, fontFamily: "Sora, sans-serif" }}>Follow-Up</div>
+              <input
+                style={inputStyle}
+                type="date"
+                value={dates.followupDate}
+                onChange={(event) => {
+                  setDates((prev) => ({ ...prev, followupDate: event.target.value }));
+                  setSaved(false);
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -1646,6 +2198,7 @@ function RecordsView({ records, saveRecords }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState(null);
+  const recordsGridColumns = "minmax(170px, 2fr) minmax(130px, 1.35fr) minmax(96px, 1fr) minmax(96px, 1fr) minmax(84px, 0.8fr) 52px";
 
   const handleSave = (updated) => {
     saveRecords(records.map((record) => (record.id === updated.id ? updated : record)));
@@ -1691,13 +2244,29 @@ function RecordsView({ records, saveRecords }) {
     if (!rec.returned) {
       return <span style={{ fontSize: 12, color: C.muted, fontFamily: "Sora, sans-serif" }}>-</span>;
     }
+
+    const showTip = (event, key) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setTip({
+        key,
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+      });
+    };
+
     return (
       <div style={{ display: "flex", gap: 5, position: "relative" }}>
         {Object.entries(dotLabels).map(([key, label]) => (
-          <div key={key} style={{ position: "relative" }} onMouseEnter={() => setTip(key)} onMouseLeave={() => setTip(null)}>
+          <div
+            key={key}
+            style={{ position: "relative" }}
+            onMouseEnter={(event) => showTip(event, key)}
+            onMouseMove={(event) => showTip(event, key)}
+            onMouseLeave={() => setTip(null)}
+          >
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: rec.returnedItems?.[key] ? C.ok : C.err, cursor: "default" }} />
-            {tip === key && (
-              <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", background: C.card, border: `1px solid ${C.borderHi}`, borderRadius: 6, padding: "4px 9px", whiteSpace: "nowrap", fontSize: 11, fontFamily: "Sora, sans-serif", color: rec.returnedItems?.[key] ? C.ok : C.err, fontWeight: 600, pointerEvents: "none", zIndex: 10, letterSpacing: "0.02em" }}>
+            {tip?.key === key && (
+              <div style={{ position: "fixed", left: tip.x, top: tip.y, transform: "translate(-50%, -100%)", background: C.card, border: `1px solid ${C.borderHi}`, borderRadius: 6, padding: "4px 9px", whiteSpace: "nowrap", fontSize: 11, fontFamily: "Sora, sans-serif", color: rec.returnedItems?.[key] ? C.ok : C.err, fontWeight: 600, pointerEvents: "none", zIndex: 1000, letterSpacing: "0.02em", boxShadow: "0 10px 24px rgba(0,0,0,0.28)" }}>
                 {rec.returnedItems?.[key] ? "✓" : "NO"} {label}
               </div>
             )}
@@ -1752,8 +2321,8 @@ function RecordsView({ records, saveRecords }) {
       ) : (
         <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
-            <div style={{ minWidth: 760 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1.1fr 1.1fr 80px 60px", gap: "0 8px", padding: "10px 16px", background: C.card, borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ minWidth: 680 }}>
+              <div style={{ display: "grid", gridTemplateColumns: recordsGridColumns, gap: "0 8px", padding: "10px 16px", background: C.card, borderBottom: `1px solid ${C.border}` }}>
                 {["Patient", "Serial #", "Drop-Off", "Follow-Up", "Status", "Items"].map((heading) => (
                   <div key={heading} style={{ fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>{heading}</div>
                 ))}
@@ -1762,7 +2331,7 @@ function RecordsView({ records, saveRecords }) {
                 <div
                   key={record.id}
                   onClick={() => setSelected(record)}
-                  style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1.1fr 1.1fr 80px 60px", gap: "0 8px", padding: "13px 16px", borderBottom: index < filtered.length - 1 ? `1px solid ${C.faint}` : "none", cursor: "pointer", background: C.surface, transition: "background 0.15s" }}
+                  style={{ display: "grid", gridTemplateColumns: recordsGridColumns, gap: "0 8px", padding: "13px 16px", borderBottom: index < filtered.length - 1 ? `1px solid ${C.faint}` : "none", cursor: "pointer", background: C.surface, transition: "background 0.15s" }}
                   onMouseEnter={(event) => {
                     event.currentTarget.style.background = C.card;
                   }}
@@ -1995,9 +2564,11 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
   const active = records.filter((record) => !record.returned);
   const overdue = active.filter((record) => record.dropoffDate && new Date(`${record.dropoffDate}T23:59:59`) < new Date());
   const totalInventory = devices.length + chargers.length;
+  const contentMaxWidth = tab === "home" ? 920 : 1120;
+  const activeLoansGridColumns = "minmax(170px, 2fr) minmax(130px, 1.35fr) minmax(96px, 1fr) minmax(96px, 1fr) minmax(84px, 0.8fr)";
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "36px 20px" }}>
+    <div style={{ maxWidth: contentMaxWidth, margin: "0 auto", padding: "36px 20px" }}>
       <div style={{ marginBottom: 32, textAlign: "center" }}>
         <div style={{ fontSize: 10, letterSpacing: "0.35em", textTransform: "uppercase", color: C.accent, fontFamily: "Sora, sans-serif", marginBottom: 12 }}>
           Sleep Medicine Solutions NW | HST Device Tracker
@@ -2010,15 +2581,15 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
         </p>
       </div>
 
-      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 28, flexWrap: "wrap" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 28, maxWidth: 820, marginInline: "auto" }}>
         {[
           ["Active Loans", active.length, C.accent],
           ["Overdue", overdue.length, overdue.length ? C.err : C.muted],
           ["Total Records", records.length, C.blue],
         ].map(([label, value, color]) => (
-          <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 22px", textAlign: "center", minWidth: 110 }}>
-            <div style={{ fontSize: 26, fontWeight: 700, color, fontFamily: "Sora, sans-serif" }}>{value}</div>
-            <div style={{ fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 4 }}>{label}</div>
+          <div key={label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 22px", textAlign: "center", minWidth: 0 }}>
+            <div style={{ fontSize: 30, fontWeight: 700, color, fontFamily: "Sora, sans-serif", lineHeight: 1 }}>{value}</div>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 6 }}>{label}</div>
           </div>
         ))}
       </div>
@@ -2051,7 +2622,7 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
 
       {tab === "home" && (
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(260), gap: 14, marginBottom: 32 }}>
+          <div style={{ display: "grid", gridTemplateColumns: responsiveGrid(320), gap: 16, marginBottom: 32 }}>
             {[
               {
                 key: "checkout",
@@ -2069,7 +2640,7 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
               <div
                 key={key}
                 onClick={() => onSelect(key)}
-                style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 16, padding: "24px 20px", cursor: "pointer", transition: "all 0.18s" }}
+                style={{ background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 18, padding: "28px 24px", cursor: "pointer", transition: "all 0.18s", minHeight: 132, display: "flex", flexDirection: "column", justifyContent: "center" }}
                 onMouseEnter={(event) => {
                   event.currentTarget.style.borderColor = color;
                   event.currentTarget.style.background = C.card;
@@ -2079,8 +2650,8 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
                   event.currentTarget.style.background = C.surface;
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "Sora, sans-serif", marginBottom: 6 }}>{label}</div>
-                <div style={{ fontSize: 13, color: C.muted, fontFamily: "Sora, sans-serif", lineHeight: 1.6 }}>{desc}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: "Sora, sans-serif", marginBottom: 8 }}>{label}</div>
+                <div style={{ fontSize: 13, color: C.muted, fontFamily: "Sora, sans-serif", lineHeight: 1.65, maxWidth: 360 }}>{desc}</div>
               </div>
             ))}
           </div>
@@ -2094,7 +2665,7 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
                 </button>
               </div>
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: 720, display: "grid", gridTemplateColumns: "2fr 1.5fr 1.2fr 1.2fr auto", gap: "0 10px" }}>
+                <div style={{ minWidth: 640, display: "grid", gridTemplateColumns: activeLoansGridColumns, gap: "0 10px" }}>
                   {["Patient", "Serial #", "Drop-Off", "Follow-Up", "Status"].map((heading) => (
                     <div key={heading} style={{ fontSize: 10, color: C.muted, fontFamily: "Sora, sans-serif", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", paddingBottom: 10, borderBottom: `1px solid ${C.faint}` }}>{heading}</div>
                   ))}
@@ -2126,6 +2697,7 @@ function HomeScreen({ onSelect, records, saveRecords, devices, saveDevices, char
 }
 
 export default function App() {
+  const signingSessionId = new URLSearchParams(window.location.search).get("signingSession");
   const [mode, setMode] = useState(null);
   const [records, setRecords] = useState([]);
   const [devices, setDevices] = useState([]);
@@ -2170,6 +2742,10 @@ export default function App() {
         Loading...
       </div>
     );
+  }
+
+  if (signingSessionId) {
+    return <RemoteSigningPage sessionId={signingSessionId} />;
   }
 
   return (

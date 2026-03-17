@@ -1,0 +1,22 @@
+services:
+  - type: redis
+    name: hst-device-tracking-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: hst-device-tracking-tool
+    runtime: node
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: hst-device-tracking-redis
+          property: connectionString
